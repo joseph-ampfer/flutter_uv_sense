@@ -87,11 +87,11 @@ class BleService extends ChangeNotifier {
 
       // Start scanning
       await FlutterBluePlus.startScan(
-        timeout: Duration(seconds: BleConfig.scanDurationSeconds),
+        timeout: Duration(seconds: BleConfig.scanForDevicesDurationSeconds),
       );
 
       // Wait for scan to complete
-      await Future.delayed(Duration(seconds: BleConfig.scanDurationSeconds));
+      await Future.delayed(Duration(seconds: BleConfig.scanForDevicesDurationSeconds));
       
       // Stop scanning
       await FlutterBluePlus.stopScan();

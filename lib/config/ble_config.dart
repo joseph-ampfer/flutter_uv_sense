@@ -13,8 +13,8 @@ class BleConfig {
   static const String deviceNameFilter = "UV Sense";
   
   // Reading configuration
-  static const int samplingDurationSeconds = 3;
-  static const int scanDurationSeconds = 4;
+  static const int samplingDurationSeconds = 2;
+  static const int scanForDevicesDurationSeconds = 4;
   
   // Connection settings
   static const int connectionTimeoutSeconds = 10;
