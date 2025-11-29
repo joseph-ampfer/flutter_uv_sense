@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../models/data_models.dart';
 import '../data/mock_data.dart';
 import '../services/ble_service.dart';
+import '../services/storage_service.dart';
 import '../providers/skin_type_provider.dart';
 
 
@@ -19,6 +20,7 @@ class _UVMonitorScreenState extends State<UVMonitorScreen> {
   double uvAlertThreshold = 6.0;
   
   List<UVReading> uvReadings = [];
+  final StorageService _storageService = StorageService();
 
   @override
   void initState() {
@@ -26,6 +28,7 @@ class _UVMonitorScreenState extends State<UVMonitorScreen> {
     // Try to reconnect to last device after first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeBle();
+      _loadPersistedData();
     });
   }
 
@@ -34,6 +37,20 @@ class _UVMonitorScreenState extends State<UVMonitorScreen> {
       await context.read<BleService>().reconnectToLastDevice();
     } catch (e) {
       print('Error reconnecting: $e');
+    }
+  }
+
+  Future<void> _loadPersistedData() async {
+    try {
+      final readings = await _storageService.loadReadings();
+      final threshold = await _storageService.loadAlertThreshold();
+      
+      setState(() {
+        uvReadings = readings;
+        uvAlertThreshold = threshold;
+      });
+    } catch (e) {
+      print('Error loading persisted data: $e');
     }
   }
 
@@ -50,6 +67,9 @@ class _UVMonitorScreenState extends State<UVMonitorScreen> {
         uvReadings = uvReadings.sublist(0, 50);
       }
     });
+    
+    // Persist readings to local storage
+    _storageService.saveReadings(uvReadings);
   }
 
   UVLevel _getUVLevel(double uvIndex) {
@@ -770,6 +790,8 @@ class _UVMonitorScreenState extends State<UVMonitorScreen> {
                                     setState(() {
                                       uvAlertThreshold = value;
                                     });
+                                    // Persist alert threshold
+                                    _storageService.saveAlertThreshold(value);
                                   },
                                 ),
                                 Row(

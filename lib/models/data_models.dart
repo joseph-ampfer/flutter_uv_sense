@@ -10,6 +10,24 @@ class UVReading {
     required this.uvIndex,
     required this.timestamp,
   });
+
+  // Convert UVReading to JSON
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'uvIndex': uvIndex,
+      'timestamp': timestamp.toIso8601String(),
+    };
+  }
+
+  // Create UVReading from JSON
+  factory UVReading.fromJson(Map<String, dynamic> json) {
+    return UVReading(
+      id: json['id'] as String,
+      uvIndex: (json['uvIndex'] as num).toDouble(),
+      timestamp: DateTime.parse(json['timestamp'] as String),
+    );
+  }
 }
 
 enum BleConnectionState {
