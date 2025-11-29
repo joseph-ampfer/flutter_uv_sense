@@ -12,18 +12,47 @@ class UVReading {
   });
 }
 
+enum BleConnectionState {
+  disconnected,
+  connecting,
+  connected,
+  disconnecting,
+}
+
 class Device {
   final String id;
   final String name;
   final int batteryLevel;
   final bool isConnected;
+  final BleConnectionState connectionState;
+  final int? signalStrength; // RSSI value
 
   Device({
     required this.id,
     required this.name,
-    required this.batteryLevel,
-    required this.isConnected,
+    this.batteryLevel = 0,
+    this.isConnected = false,
+    this.connectionState = BleConnectionState.disconnected,
+    this.signalStrength,
   });
+
+  Device copyWith({
+    String? id,
+    String? name,
+    int? batteryLevel,
+    bool? isConnected,
+    BleConnectionState? connectionState,
+    int? signalStrength,
+  }) {
+    return Device(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      batteryLevel: batteryLevel ?? this.batteryLevel,
+      isConnected: isConnected ?? this.isConnected,
+      connectionState: connectionState ?? this.connectionState,
+      signalStrength: signalStrength ?? this.signalStrength,
+    );
+  }
 }
 
 class SkinType {

@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/data_models.dart';
 import '../data/mock_data.dart';
-import '../main.dart';
+import '../providers/skin_type_provider.dart';
 
 class ResultsScreen extends StatelessWidget {
   final Map<int, int> responses;
@@ -195,7 +196,7 @@ class ResultsScreen extends StatelessWidget {
                     child: ElevatedButton(
                       onPressed: () {
                         // Apply skin type to UV Monitor settings
-                        globalSelectedSkinType = determinedSkinType;
+                        context.read<SkinTypeProvider>().updateSkinType(determinedSkinType);
                         
                         // Show confirmation snackbar
                         ScaffoldMessenger.of(context).showSnackBar(

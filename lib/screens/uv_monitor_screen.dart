@@ -1,54 +1,54 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/data_models.dart';
 import '../data/mock_data.dart';
+import '../services/ble_service.dart';
+import '../providers/skin_type_provider.dart';
 
 
 // UV Monitor Screen
 class UVMonitorScreen extends StatefulWidget {
-  final SkinType? initialSkinType;
-  final Function(SkinType)? onSkinTypeUpdated;
-  
-  const UVMonitorScreen({
-    super.key,
-    this.initialSkinType,
-    this.onSkinTypeUpdated,
-  });
+  const UVMonitorScreen({super.key});
 
   @override
   State<UVMonitorScreen> createState() => _UVMonitorScreenState();
 }
 
 class _UVMonitorScreenState extends State<UVMonitorScreen> {
-  double currentUV = 6.2;
-  late SkinType selectedSkinType;
-  Device? connectedDevice;
-  bool showDeviceModal = false;
-  bool showSettingsModal = false;
-  bool isScanning = false;
+  double currentUV = 0.0;
+  double uvAlertThreshold = 6.0;
   
   List<UVReading> uvReadings = [];
-  List<Device> bluetoothDevices = [
-    Device(id: 'UV001', name: 'UV Sensor Pro', batteryLevel: 85, isConnected: true),
-    Device(id: 'UV002', name: 'SunGuard Device', batteryLevel: 62, isConnected: false),
-    Device(id: 'UV003', name: 'UV Monitor X', batteryLevel: 91, isConnected: false),
-  ];
 
   @override
   void initState() {
     super.initState();
-    selectedSkinType = widget.initialSkinType ?? skinTypes[2]; // Medium skin type default
-    connectedDevice = bluetoothDevices.firstWhere((device) => device.isConnected);
-    _generateMockReadings();
+    // Try to reconnect to last device after first frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeBle();
+    });
   }
 
-  void _generateMockReadings() {
-    final now = DateTime.now();
-    uvReadings = List.generate(10, (index) {
-      return UVReading(
-        id: 'reading_$index',
-        uvIndex: (currentUV + (index * 0.5) - 2).clamp(0.0, 12.0),
-        timestamp: now.subtract(Duration(minutes: index * 15)),
-      );
+  Future<void> _initializeBle() async {
+    try {
+      await context.read<BleService>().reconnectToLastDevice();
+    } catch (e) {
+      print('Error reconnecting: $e');
+    }
+  }
+
+  void _addUVReading(double uvValue) {
+    final reading = UVReading(
+      id: 'reading_${DateTime.now().millisecondsSinceEpoch}',
+      uvIndex: uvValue,
+      timestamp: DateTime.now(),
+    );
+    setState(() {
+      uvReadings.insert(0, reading);
+      // Keep only last 50 readings
+      if (uvReadings.length > 50) {
+        uvReadings = uvReadings.sublist(0, 50);
+      }
     });
   }
 
@@ -60,7 +60,7 @@ class _UVMonitorScreenState extends State<UVMonitorScreen> {
     return UVLevel('Extreme', Colors.purple);
   }
 
-  UVRecommendation _getRecommendations() {
+  UVRecommendation _getRecommendations(SkinType selectedSkinType) {
     final recommendation = uvRecommendations.firstWhere(
       (r) => currentUV >= r.uvIndex,
       orElse: () => uvRecommendations.last,
@@ -73,52 +73,67 @@ class _UVMonitorScreenState extends State<UVMonitorScreen> {
     );
   }
 
-  void _connectToDevice(String deviceId) {
-    setState(() {
-      // Disconnect all devices first
-      bluetoothDevices = bluetoothDevices.map((device) => 
-        Device(
-          id: device.id,
-          name: device.name,
-          batteryLevel: device.batteryLevel,
-          isConnected: false,
-        )
-      ).toList();
-      
-      // Connect the selected device
-      final deviceIndex = bluetoothDevices.indexWhere((device) => device.id == deviceId);
-      if (deviceIndex != -1) {
-        bluetoothDevices[deviceIndex] = Device(
-          id: bluetoothDevices[deviceIndex].id,
-          name: bluetoothDevices[deviceIndex].name,
-          batteryLevel: bluetoothDevices[deviceIndex].batteryLevel,
-          isConnected: true,
+  Future<void> _scanForDevices() async {
+    try {
+      await context.read<BleService>().scanForDevices();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Scan failed: $e')),
         );
-        connectedDevice = bluetoothDevices[deviceIndex];
       }
-    });
+    }
   }
 
-  void _scanForDevices() {
-    setState(() {
-      isScanning = true;
-    });
+  Future<void> _readUVValue() async {
+    final bleService = context.read<BleService>();
     
-    // Simulate scanning delay
-    Future.delayed(const Duration(seconds: 2), () {
-      setState(() {
-        isScanning = false;
-      });
-    });
+    if (!bleService.isConnected) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please connect to a device first')),
+      );
+      return;
+    }
+
+    try {
+      final uvValue = await bleService.startUVReading();
+      if (uvValue != null) {
+        setState(() {
+          currentUV = uvValue;
+        });
+        _addUVReading(uvValue);
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('UV Index: ${uvValue.toStringAsFixed(1)}')),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No UV data received')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to read UV: $e')),
+        );
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final selectedSkinType = context.watch<SkinTypeProvider>().selectedSkinType;
     final uvLevel = _getUVLevel(currentUV);
-    final recommendations = _getRecommendations();
+    final recommendations = _getRecommendations(selectedSkinType);
     
-    return Scaffold(
-      body: RefreshIndicator(
+    return Consumer<BleService>(
+      builder: (context, bleService, child) {
+        return Scaffold(
+          body: RefreshIndicator(
         onRefresh: () async {
           _scanForDevices();
           await Future.delayed(const Duration(seconds: 1));
@@ -148,7 +163,7 @@ class _UVMonitorScreenState extends State<UVMonitorScreen> {
                 IconButton(
                   icon: Icon(
                     Icons.bluetooth,
-                    color: connectedDevice != null ? Colors.blue : Colors.grey,
+                    color: bleService.isConnected ? Colors.blue : Colors.grey,
                   ),
                   onPressed: () {
                     _showDeviceModal();
@@ -171,11 +186,11 @@ class _UVMonitorScreenState extends State<UVMonitorScreen> {
                   const SizedBox(height: 16),
                   
                   // Device Status Card
-                  if (connectedDevice != null) _buildDeviceCard(),
-                  if (connectedDevice != null) const SizedBox(height: 16),
+                  if (bleService.isConnected) _buildDeviceCard(bleService),
+                  if (bleService.isConnected) const SizedBox(height: 16),
                   
                   // Recommendations Card
-                  _buildRecommendationsCard(recommendations),
+                  _buildRecommendationsCard(recommendations, selectedSkinType),
                   const SizedBox(height: 16),
                   
                   // Quiz Card
@@ -190,56 +205,97 @@ class _UVMonitorScreenState extends State<UVMonitorScreen> {
           ],
         ),
       ),
+          floatingActionButton: FloatingActionButton.extended(
+            onPressed: bleService.isReading ? null : _readUVValue,
+            icon: bleService.isReading 
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : const Icon(Icons.sensors),
+            label: Text(bleService.isReading ? 'Reading...' : 'Read UV'),
+            backgroundColor: bleService.isReading ? Colors.grey[300]! : Theme.of(context).colorScheme.primary,
+            foregroundColor: Colors.white,
+          ),
+        );
+      },
     );
   }
 
   Widget _buildUVCard(UVLevel uvLevel) {
-    return Card(
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              uvLevel.color,
-              uvLevel.color.withOpacity(0.7),
-            ],
+    return Consumer<BleService>(
+      builder: (context, bleService, child) {
+        return Card(
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  uvLevel.color,
+                  uvLevel.color.withOpacity(0.7),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              children: [
+                const Icon(Icons.wb_sunny, size: 40, color: Colors.white),
+                const SizedBox(height: 8),
+                Text(
+                  currentUV.toStringAsFixed(1),
+                  style: const TextStyle(
+                    fontSize: 48,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                Text(
+                  uvLevel.level,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+                Text(
+                  bleService.isReading ? 'Reading...' : 'UV Index',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  onPressed: bleService.isReading ? null : _readUVValue,
+                  icon: bleService.isReading 
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : const Icon(Icons.refresh),
+                  label: Text(bleService.isReading ? 'Reading for 3s...' : 'Read UV Level'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: uvLevel.color,
+                  ),
+                ),
+              ],
+            ),
           ),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            const Icon(Icons.wb_sunny, size: 40, color: Colors.white),
-            const SizedBox(height: 8),
-            Text(
-              currentUV.toStringAsFixed(1),
-              style: const TextStyle(
-                fontSize: 48,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-            Text(
-              uvLevel.level,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
-            ),
-            const Text(
-              'UV Index',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.white,
-              ),
-            ),
-          ],
-        ),
-      ),
+        );
+      },
     );
   }
 
-  Widget _buildDeviceCard() {
+  Widget _buildDeviceCard(BleService bleService) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -248,31 +304,37 @@ class _UVMonitorScreenState extends State<UVMonitorScreen> {
           children: [
             Row(
               children: [
-                const Icon(Icons.wifi, color: Colors.green),
+                const Icon(Icons.bluetooth_connected, color: Colors.green),
                 const SizedBox(width: 8),
-                Text(
-                  connectedDevice!.name,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                  ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      bleService.connectedDevice?.platformName ?? 'Unknown',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const Text(
+                      'Connected',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.green,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-            Row(
-              children: [
-                const Icon(Icons.battery_full),
-                const SizedBox(width: 4),
-                Text('${connectedDevice!.batteryLevel}%'),
-              ],
-            ),
+            const Icon(Icons.check_circle, color: Colors.green),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildRecommendationsCard(UVRecommendation recommendations) {
+  Widget _buildRecommendationsCard(UVRecommendation recommendations, SkinType selectedSkinType) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -480,76 +542,124 @@ class _UVMonitorScreenState extends State<UVMonitorScreen> {
     return Container(
       height: MediaQuery.of(context).size.height * 0.7,
       padding: const EdgeInsets.only(top: 8),
-      child: Column(
-        children: [
-          Container(
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: Colors.grey[300],
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(color: Colors.grey[300]!),
+      child: Consumer<BleService>(
+        builder: (context, bleService, child) {
+          return Column(
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
               ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Bluetooth Devices',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(color: Colors.grey[300]!),
+                  ),
                 ),
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Done'),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Bluetooth Devices',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Done'),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
-          Container(
-            margin: const EdgeInsets.all(16),
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: isScanning ? null : _scanForDevices,
-              child: Text(isScanning ? 'Scanning...' : 'Scan for Devices'),
-            ),
-          ),
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: bluetoothDevices.length,
-              itemBuilder: (context, index) {
-                final device = bluetoothDevices[index];
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    title: Text(device.name),
-                    subtitle: Text(device.id),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
+              ),
+              Container(
+                margin: const EdgeInsets.all(16),
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: bleService.isScanning 
+                      ? null 
+                      : () => context.read<BleService>().scanForDevices(),
+                  child: Text(bleService.isScanning ? 'Scanning...' : 'Scan for Devices'),
+                ),
+              ),
+              // Device list automatically updates via Provider
+              if (bleService.discoveredDevices.isEmpty && !bleService.isScanning)
+                const Expanded(
+                  child: Center(
+                    child: Text(
+                      'No devices found.\nTap "Scan for Devices" to search.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  ),
+                )
+              else if (bleService.isScanning && bleService.discoveredDevices.isEmpty)
+                const Expanded(
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        if (device.isConnected)
-                          const Text(
-                            'Connected',
-                            style: TextStyle(color: Colors.green, fontWeight: FontWeight.w500),
-                          ),
-                        const SizedBox(width: 8),
-                        Text('${device.batteryLevel}%'),
+                        CircularProgressIndicator(),
+                        SizedBox(height: 16),
+                        Text('Scanning for devices...'),
                       ],
                     ),
-                    onTap: () => _connectToDevice(device.id),
-                    tileColor: device.isConnected ? Colors.green[50] : null,
                   ),
-                );
-              },
-            ),
-          ),
-        ],
+                )
+              else
+                Expanded(
+                  child: ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: bleService.discoveredDevices.length,
+                    itemBuilder: (context, index) {
+                      final device = bleService.discoveredDevices[index];
+                      final isCurrentlyConnected = bleService.connectedDevice?.remoteId == device.remoteId;
+                      
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: ListTile(
+                          leading: const Icon(Icons.bluetooth),
+                          title: Text(device.platformName.isEmpty ? 'Unknown Device' : device.platformName),
+                          subtitle: Text(device.remoteId.toString()),
+                          trailing: isCurrentlyConnected
+                              ? const Icon(Icons.check_circle, color: Colors.green)
+                              : bleService.isConnecting
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    )
+                                  : const Icon(Icons.chevron_right),
+                          onTap: () async {
+                            try {
+                              await context.read<BleService>().connectToDevice(device);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Connected to ${device.platformName}')),
+                                );
+                              }
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Failed to connect: $e')),
+                                );
+                              }
+                            }
+                          },
+                          tileColor: isCurrentlyConnected ? Colors.green[50] : null,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -558,87 +668,141 @@ class _UVMonitorScreenState extends State<UVMonitorScreen> {
     return Container(
       height: MediaQuery.of(context).size.height * 0.8,
       padding: const EdgeInsets.only(top: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: Colors.grey[300],
-              borderRadius: BorderRadius.circular(2),
-            ),
-            margin: const EdgeInsets.only(bottom: 16),
-            alignment: Alignment.center,
-          ),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(color: Colors.grey[300]!),
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Settings',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Done'),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                const Text(
-                  'Skin Type',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 12),
-                ...skinTypes.map((skin) => Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  color: selectedSkinType.id == skin.id ? Theme.of(context).colorScheme.primaryContainer : null,
-                  child: ListTile(
-                    leading: Container(
-                      width: 24,
-                      height: 24,
+      child: Consumer<SkinTypeProvider>(
+        builder: (context, skinTypeProvider, child) {
+          return StatefulBuilder(
+            builder: (BuildContext context, StateSetter setModalState) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
                       decoration: BoxDecoration(
-                        color: skin.color,
-                        shape: BoxShape.circle,
+                        color: Colors.grey[300],
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                      margin: const EdgeInsets.only(bottom: 16),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(color: Colors.grey[300]!),
                       ),
                     ),
-                    title: Text(skin.name),
-                    subtitle: Text(skin.description),
-                    onTap: () {
-                      setState(() {
-                        selectedSkinType = skin;
-                      });
-                      widget.onSkinTypeUpdated?.call(skin);
-                    },
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Settings',
+                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Done'),
+                        ),
+                      ],
+                    ),
                   ),
-                )),
-                const SizedBox(height: 20),
-                const Text(
-                  'UV Alert Threshold',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 12),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text('Alert when UV index exceeds 6.0'),
+                  Expanded(
+                    child: ListView(
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        const Text(
+                          'Skin Type',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 12),
+                        ...skinTypes.map((skin) => Card(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          color: skinTypeProvider.selectedSkinType.id == skin.id 
+                              ? Theme.of(context).colorScheme.primaryContainer 
+                              : null,
+                          child: ListTile(
+                            leading: Container(
+                              width: 24,
+                              height: 24,
+                              decoration: BoxDecoration(
+                                color: skin.color,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            title: Text(skin.name),
+                            subtitle: Text(skin.description),
+                            onTap: () {
+                              context.read<SkinTypeProvider>().updateSkinType(skin);
+                            },
+                          ),
+                        )),
+                        const SizedBox(height: 20),
+                        const Text(
+                          'UV Alert Threshold',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 12),
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Alert when UV index exceeds ${uvAlertThreshold.toStringAsFixed(1)}',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Slider(
+                                  value: uvAlertThreshold,
+                                  min: 0,
+                                  max: 11,
+                                  divisions: 22,
+                                  label: uvAlertThreshold.toStringAsFixed(1),
+                                  onChanged: (value) {
+                                    setModalState(() {
+                                      uvAlertThreshold = value;
+                                    });
+                                    setState(() {
+                                      uvAlertThreshold = value;
+                                    });
+                                  },
+                                ),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      '0.0 (Low)',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey[600],
+                                      ),
+                                    ),
+                                    Text(
+                                      '11.0 (Extreme)',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey[600],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ),
-        ],
+                ],
+              );
+            },
+          );
+        },
       ),
     );
   }
