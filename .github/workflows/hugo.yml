@@ -29,6 +29,11 @@ jobs:
           hugo-version: 'latest'
           extended: true
 
+      - name: Install PaperMod Theme
+        run: |
+          cd DOCS/website
+          git clone https://github.com/adityatelange/hugo-PaperMod.git themes/PaperMod --depth=1
+
       - name: Build
         run: |
           cd DOCS/website
