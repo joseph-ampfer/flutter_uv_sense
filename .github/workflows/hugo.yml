@@ -37,7 +37,7 @@ jobs:
       - name: Build
         run: |
           cd DOCS/website
-          hugo --minify
+          hugo --minify --baseURL "https://joseph-ampfer.github.io/flutter_uv_sense/"
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
