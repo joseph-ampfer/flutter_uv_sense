@@ -46,6 +46,7 @@ class _QuizScreenState extends State<QuizScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
+          key: const Key('quiz_close_button'),
           icon: const Icon(Icons.close, color: Colors.black),
           onPressed: () => Navigator.pop(context),
         ),
@@ -55,6 +56,7 @@ class _QuizScreenState extends State<QuizScreen> {
             child: Center(
               child: Text(
                 '${currentPage + 1}/${quizQuestions.length}',
+                key: const Key('quiz_question_counter'),
                 style: const TextStyle(
                   color: Colors.black54,
                   fontSize: 16,
@@ -126,6 +128,7 @@ class _QuizScreenState extends State<QuizScreen> {
     final isSelected = responses[question.id] == option.value;
     
     return Container(
+      key: Key('quiz_option_${question.id}_${option.value}'),
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 12),
       child: Material(

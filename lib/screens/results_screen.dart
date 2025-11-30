@@ -66,6 +66,7 @@ class ResultsScreen extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   IconButton(
+                    key: const Key('results_close_button'),
                     icon: const Icon(Icons.close),
                     onPressed: () => Navigator.pop(context),
                   ),
@@ -83,9 +84,10 @@ class ResultsScreen extends StatelessWidget {
               const SizedBox(height: 40),
               
               Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
                     // Skin type indicator
                     Container(
                       width: 120,
@@ -108,6 +110,7 @@ class ResultsScreen extends StatelessWidget {
                     // Skin type name
                     Text(
                       determinedSkinType.name,
+                      key: const Key('results_skin_type_name'),
                       style: const TextStyle(
                         fontSize: 36,
                         fontWeight: FontWeight.bold,
@@ -131,6 +134,7 @@ class ResultsScreen extends StatelessWidget {
                     
                     // Recommendations card
                     Container(
+                      key: const Key('results_recommendations_list'),
                       width: double.infinity,
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
@@ -186,6 +190,7 @@ class ResultsScreen extends StatelessWidget {
                   ],
                 ),
               ),
+                ),
               
               // Action buttons
               Column(
@@ -194,6 +199,7 @@ class ResultsScreen extends StatelessWidget {
                     width: double.infinity,
                     height: 56,
                     child: ElevatedButton(
+                      key: const Key('results_apply_button'),
                       onPressed: () {
                         // Apply skin type to UV Monitor settings
                         context.read<SkinTypeProvider>().updateSkinType(determinedSkinType);
@@ -232,6 +238,7 @@ class ResultsScreen extends StatelessWidget {
                     width: double.infinity,
                     height: 56,
                     child: OutlinedButton(
+                      key: const Key('results_retake_button'),
                       onPressed: () => Navigator.pushReplacementNamed(context, '/quiz'),
                       style: OutlinedButton.styleFrom(
                         side: const BorderSide(color: Colors.black, width: 2),

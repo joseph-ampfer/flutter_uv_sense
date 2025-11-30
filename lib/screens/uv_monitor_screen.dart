@@ -181,6 +181,7 @@ class _UVMonitorScreenState extends State<UVMonitorScreen> {
               ),
               actions: [
                 IconButton(
+                  key: const Key('uv_connect_button'),
                   icon: Icon(
                     Icons.bluetooth,
                     color: bleService.isConnected ? Colors.blue : Colors.grey,
@@ -226,6 +227,7 @@ class _UVMonitorScreenState extends State<UVMonitorScreen> {
         ),
       ),
           floatingActionButton: FloatingActionButton.extended(
+            key: const Key('uv_take_reading_button'),
             onPressed: bleService.isReading ? null : _readUVValue,
             icon: bleService.isReading 
                 ? const SizedBox(
@@ -267,6 +269,7 @@ class _UVMonitorScreenState extends State<UVMonitorScreen> {
                 const SizedBox(height: 8),
                 Text(
                   currentUV.toStringAsFixed(1),
+                  key: const Key('uv_current_display'),
                   style: const TextStyle(
                     fontSize: 48,
                     fontWeight: FontWeight.bold,
@@ -402,6 +405,7 @@ class _UVMonitorScreenState extends State<UVMonitorScreen> {
 
   Widget _buildQuizCard() {
     return Card(
+      key: const Key('uv_quiz_button'),
       child: InkWell(
         onTap: () => Navigator.pushNamed(context, '/quiz'),
         borderRadius: BorderRadius.circular(12),
@@ -467,6 +471,7 @@ class _UVMonitorScreenState extends State<UVMonitorScreen> {
 
   Widget _buildReadingsCard() {
     return Card(
+      key: const Key('uv_readings_list'),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -601,6 +606,7 @@ class _UVMonitorScreenState extends State<UVMonitorScreen> {
                 margin: const EdgeInsets.all(16),
                 width: double.infinity,
                 child: ElevatedButton(
+                  key: const Key('uv_scan_button'),
                   onPressed: bleService.isScanning 
                       ? null 
                       : () => context.read<BleService>().scanForDevices(),
