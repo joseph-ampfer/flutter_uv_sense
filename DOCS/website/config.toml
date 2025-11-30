@@ -1,4 +1,4 @@
-baseURL = "https://example.com/uv-monitor-app/"
+baseURL = "https://joseph-ampfer.github.io/flutter_uv_sense/"
 languageCode = "en-us"
 title = "UV Monitor App"
 theme = "PaperMod"
