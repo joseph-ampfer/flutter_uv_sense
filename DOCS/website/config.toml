@@ -1,0 +1,89 @@
+baseURL = "https://example.com/uv-monitor-app/"
+languageCode = "en-us"
+title = "UV Monitor App"
+theme = "PaperMod"
+
+[params]
+  description = "Real-time UV exposure monitoring with personalized recommendations"
+  author = "UV Monitor Team"
+  
+  # Homepage
+  homeInfoParams.Title = "UV Monitor App"
+  homeInfoParams.Content = "Your Personal UV Exposure Assistant - Real-time monitoring with Bluetooth sensor integration"
+  
+  # Features
+  [params.features]
+    enable = true
+  
+  # Social
+  [[params.socialIcons]]
+    name = "github"
+    url = "https://github.com"
+  
+  # Show reading time
+  ShowReadingTime = true
+  ShowShareButtons = false
+  ShowPostNavLinks = true
+  ShowBreadCrumbs = true
+  ShowCodeCopyButtons = true
+  ShowRssButtonInSectionTermList = true
+  
+  # Code highlighting
+  pygmentsUseClasses = true
+  pygmentsCodeFences = true
+  
+  # Search
+  [params.fuseOpts]
+    isCaseSensitive = false
+    shouldSort = true
+    location = 0
+    distance = 1000
+    threshold = 0.4
+    minMatchCharLength = 0
+    keys = ["title", "permalink", "summary", "content"]
+
+[menu]
+  [[menu.main]]
+    identifier = "home"
+    name = "Home"
+    url = "/"
+    weight = 10
+  
+  [[menu.main]]
+    identifier = "features"
+    name = "Features"
+    url = "/features/"
+    weight = 20
+  
+  [[menu.main]]
+    identifier = "docs"
+    name = "Documentation"
+    url = "/docs/"
+    weight = 30
+  
+  [[menu.main]]
+    identifier = "getting-started"
+    name = "Get Started"
+    url = "/getting-started/"
+    weight = 40
+  
+  [[menu.main]]
+    identifier = "about"
+    name = "About"
+    url = "/about/"
+    weight = 50
+
+[markup]
+  [markup.highlight]
+    anchorLineNos = false
+    codeFences = true
+    guessSyntax = true
+    lineNos = true
+    lineNumbersInTable = true
+    noClasses = false
+    style = "monokai"
+    tabWidth = 4
+
+[outputs]
+  home = ["HTML", "RSS", "JSON"]
+
